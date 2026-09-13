@@ -14,7 +14,10 @@ test('index keeps the approved AI API Tester UI and universal controls', () => {
     'id="modelShell"',
     'id="manualModel"',
     'id="usePresets"',
+    'id="providerSearch"',
+    'id="providerSearchResults"',
     'id="providerSelect"',
+    'id="providerTrustBadge"',
     'id="endpointSelect"',
     'id="transportMode"',
     'id="baseURL"',
@@ -36,7 +39,15 @@ test('inline browser JavaScript parses successfully', () => {
   for (const source of scripts) new vm.Script(source);
 });
 
-test('frontend references the verified provider library and safe universal proxy', () => {
+test('frontend exposes provider search, trust labels, and auto setup behavior', () => {
+  assert.match(html, /searchProviders\(/);
+  assert.match(html, /getAutoSetup\(/);
+  assert.match(html, /Community/i);
+  assert.match(html, /Verified/i);
+  assert.match(html, /Auto setup/i);
+});
+
+test('frontend references the provider library and safe universal proxy', () => {
   assert.match(html, /\/lib\/provider-presets\.js/);
   assert.match(html, /\/api\/proxy/);
   assert.match(html, /CUSTOM_PROXY_ALLOWLIST/);

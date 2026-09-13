@@ -40,7 +40,7 @@
   <div class="field">
     <label for="providerSearch"><i data-lucide="search" width="14"></i>Search API providers</label>
     <div class="control-wrap"><i class="control-icon" data-lucide="search"></i><input class="input" id="providerSearch" type="search" placeholder="Search OpenRouter, TabiToken, Chutes, Z.AI…" autocomplete="off" /></div>
-    <div class="provider-search-toolbar"><div class="helper">Searches Verified + Community presets. Verified = official docs; Community = community-sourced and may change.</div><div style="display:flex;gap:7px;align-items:center"><span id="providerTrustBadge" class="tag ok">Verified</span><button class="mini-btn" id="autoSetupBtn" type="button"><i data-lucide="wand-sparkles" width="14"></i>Auto setup</button></div></div>
+    <div class="provider-search-toolbar"><div class="helper">Searches Verified + Community presets. Auto setup runs a small real API test to find a working documented endpoint and may use a few provider credits.</div><div style="display:flex;gap:7px;align-items:center"><span id="providerTrustBadge" class="tag ok">Verified</span><button class="mini-btn" id="autoSetupBtn" type="button"><i data-lucide="wand-sparkles" width="14"></i>Auto setup</button></div></div>
     <div class="provider-search-results" id="providerSearchResults" aria-live="polite"></div>
   </div>
 </div>
@@ -106,9 +106,10 @@
 <div class="footer-note"><i data-lucide="info"></i><span>Keys are not saved to localStorage. Auto mode first tries the provider directly and uses your Vercel proxy only for browser/CORS/network failures. A proxy does not bypass provider-side client restrictions. Model tests can use provider credits.</span></div>
 </main>
 <script src="/lib/provider-presets.js"></script>
+<script src="/lib/auto-setup-core.js"></script>
 <script src="/lib/agentrouter-core.js"></script>
 <script>
-const Presets=window.ProviderPresets;const Core=window.ApiTesterCore||window.AgentRouterCore;const $=id=>document.getElementById(id);
+const Presets=window.ProviderPresets;const AutoSetup=window.AutoSetupCore;const Core=window.ApiTesterCore||window.AgentRouterCore;const $=id=>document.getElementById(id);
 const state={models:[],selected:null,keys:[],activeKeyIndex:0,keyResults:new Map(),keysVisible:false,lastResultText:''};
 function normalizeBaseURL(url){return String(url||'').trim().replace(/\/+$/,'')}
 function parseKeys(value=''){return[...new Set(String(value).split(/[\s,]+/).map(k=>k.trim()).filter(Boolean))]}
@@ -148,6 +149,118 @@ async function directRequest(key,kind='test'){
 }
 async function proxyRequest(key,kind='test',fallback=false){const meta=requestMeta(kind);const payload=meta.preset?{providerId:meta.providerId,endpointId:meta.endpointId,apiKey:key,model:getSelectedModel(),prompt:$('prompt').value,maxTokens:maxTokens()}:{providerId:'custom',apiKey:key,customBaseUrl:$('baseURL').value.trim(),customPath:kind==='models'?($('modelsPath').value.trim()||'/'):($('endpointPath').value.trim()||'/'),customMethod:kind==='models'?'GET':$('httpMethod').value,customFormat:kind==='models'?'none':$('requestFormat').value,authMode:$('authMode').value,customAuthHeader:$('customAuthHeader').value.trim(),customAuthPrefix:$('customAuthPrefix').value.trim(),customQueryParam:$('customQueryParam').value.trim()||'key',customHeaders:$('customHeaders').value.trim(),customBody:$('customBody').value,model:getSelectedModel(),prompt:$('prompt').value,maxTokens:maxTokens()};const raw=await fetchJson('/api/proxy',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)},50000);if(!raw.reachedServer)return{...raw,transport:'proxy',meta,autoFallback:fallback};const wrap=raw.data||{};return{reachedServer:Number(wrap.upstreamStatus||0)>0,ok:typeof wrap.upstreamOk==='boolean'?wrap.upstreamOk:raw.ok,status:Number(wrap.upstreamStatus??raw.status),latency:Number(wrap.latencyMs??raw.latency),data:wrap.data??wrap,error:wrap.error,transport:'proxy',meta,autoFallback:fallback,url:wrap.endpoint||meta.path}}
 async function requestKey(key,kind='test'){const mode=$('transportMode').value;if(mode==='direct')return directRequest(key,kind);if(mode==='proxy')return proxyRequest(key,kind,false);const direct=await directRequest(key,kind);if(Core.shouldProxyFallback(direct))return proxyRequest(key,kind,true);return direct}
+async function probeProviderSetup(){
+  if(!$('usePresets').checked){setStatus('Turn on the provider library before using Auto setup.','bad');return}
+  const provider=currentProvider();
+  if(!provider){setStatus('Select a provider first.','bad');return}
+  syncKeys();
+  const key=state.keys[Math.min(state.activeKeyIndex,state.keys.length-1)]||'';
+  const candidates=AutoSetup.probeCandidates(provider,$('endpointSelect').value);
+  if(!candidates.length){setStatus('This provider has no request endpoint to probe.','bad');return}
+  const needsAnyKey=candidates.some(endpoint=>authNeedsKey(effectivePresetAuth(provider,endpoint).type));
+  if(needsAnyKey&&!key){setStatus('Enter an API key before Auto setup can live-test this provider.','bad');return}
+  if(!confirm('Auto setup will run a small real API test using your active key. It may use a few provider credits. Continue?'))return;
+
+  const button=$('autoSetupBtn');
+  const original={endpoint:$('endpointSelect').value,manual:$('manualModel').value,prompt:$('prompt').value,maxTokens:$('maxTokens').value,models:state.models,selected:state.selected};
+  const attempts=[];
+  let working=false;
+  button.disabled=true;
+  $('loadBtn').disabled=true;
+  $('testActiveBtn').disabled=true;
+  $('testAllBtn').disabled=true;
+  $('prompt').value='Reply only with OK';
+  $('maxTokens').value='8';
+  try{
+    let probeModel=$('manualModel').value.trim();
+    const modelsEndpoint=Presets.getModelsEndpoint(provider.id);
+    if(!probeModel&&modelsEndpoint){
+      setStatus('Auto setup: checking the provider model catalog…','loading');
+      setResult('Step 1: finding a usable text-generation model…');
+      let modelResult;
+      try{modelResult=await requestKey(key,'models')}catch(error){modelResult={reachedServer:false,ok:false,status:0,error:error.message,data:{error:error.message}}}
+      const modelClass=AutoSetup.classifyProbeResult(modelResult);
+      attempts.push({stage:'models',endpoint:modelsEndpoint.path,status:modelResult.status||0,transport:modelResult.transport||'n/a',result:modelClass.kind,message:modelClass.message});
+      if(modelResult.ok){
+        const ids=Core.parseModelIds(modelResult.data);
+        probeModel=AutoSetup.chooseProbeModel(ids);
+        if(probeModel){
+          state.models=normalizeModels(ids);
+          state.selected=state.models.find(model=>model.id===probeModel)||{id:probeModel,label:probeModel};
+          $('selectedModelName').textContent=state.selected.label||probeModel;
+          $('selectedModelId').textContent=probeModel;
+          renderModelList(state.models);
+        }
+      }
+    }
+    if(!probeModel)probeModel=state.selected?.id||'';
+    if(!probeModel){
+      setStatus('Auto setup could not discover a usable model. Enter a Manual model ID, then press Auto setup again.','bad');
+      setResult(JSON.stringify({provider:provider.name,workingSetup:null,attempts},null,2));
+      return;
+    }
+
+    for(let i=0;i<candidates.length;i++){
+      const endpoint=candidates[i];
+      $('endpointSelect').value=endpoint.id;
+      applyPreset();
+      if(!$('manualModel').value.trim()&&!state.selected?.id){$('manualModel').value=probeModel}
+      setStatus('Auto setup: testing '+(i+1)+'/'+candidates.length+' — '+endpoint.label+'…','loading');
+      setMetrics([['Provider',provider.name],['Endpoint',endpoint.path],['Model',probeModel],['Probe',String(i+1)+'/'+candidates.length]]);
+      setResult('Testing documented endpoint:
+'+endpoint.method+' '+(endpoint.baseUrl||provider.baseUrl)+endpoint.path+'
+
+A tiny real request is being sent. Client restrictions are never bypassed.');
+      let result;
+      try{result=await requestKey(key,'test')}catch(error){result={reachedServer:false,ok:false,status:0,error:error.message,data:{error:error.message},transport:'n/a'}}
+      const classified=AutoSetup.classifyProbeResult(result);
+      attempts.push({stage:'request',endpointId:endpoint.id,label:endpoint.label,path:endpoint.path,status:result.status||0,transport:result.autoFallback?'proxy fallback':result.transport||'n/a',result:classified.kind,message:classified.message});
+      if(classified.kind==='success'){
+        working=true;
+        const reply=Core.extractReply(result.data)||'(Successful response received.)';
+        setStatus('Working setup found ✓ — '+endpoint.label,'good');
+        setMetrics([['HTTP',result.status||200],['Latency',String(result.latency||0)+' ms'],['Transport',result.autoFallback?'proxy fallback':result.transport||'n/a'],['Model',probeModel]]);
+        setResult('WORKING SETUP ✓
+Provider: '+provider.name+'
+Endpoint: '+endpoint.method+' '+(endpoint.baseUrl||provider.baseUrl)+endpoint.path+'
+Format: '+endpoint.format+'
+Auth: '+effectivePresetAuth(provider,endpoint).type+'
+Model: '+probeModel+'
+
+Probe response:
+'+reply+'
+
+The selected endpoint has been left applied in the form.');
+        $('providerNote').innerHTML+=' • <strong>Live tested working</strong>: '+endpoint.label;
+        return;
+      }
+    }
+
+    const kinds=attempts.map(item=>item.result);
+    if(kinds.includes('client_blocked'))setStatus('Provider reached, but every tested documented route was blocked for this client. Auto setup will not bypass provider client restrictions.','bad');
+    else if(kinds.includes('auth_failed'))setStatus('No working setup found: the provider rejected the API key/authentication on the tested routes.','bad');
+    else if(kinds.includes('rate_limited'))setStatus('No working setup confirmed because the provider rate-limited the probe. Try again later.','bad');
+    else setStatus('No working setup was confirmed from the documented presets.','bad');
+    setResult(JSON.stringify({provider:provider.name,workingSetup:null,model:probeModel,attempts},null,2));
+  }finally{
+    $('prompt').value=original.prompt;
+    $('maxTokens').value=original.maxTokens;
+    button.disabled=false;
+    $('loadBtn').disabled=false;
+    $('testActiveBtn').disabled=false;
+    $('testAllBtn').disabled=false;
+    if(!working){
+      $('endpointSelect').value=original.endpoint;
+      applyPreset();
+      $('manualModel').value=original.manual;
+      state.models=original.models;
+      state.selected=original.selected;
+      $('selectedModelName').textContent=original.selected?.label||'Load models first';
+      $('selectedModelId').textContent=original.selected?.id||'No model selected';
+      renderModelList(state.models);
+    }
+  }
+}
 function syncKeys(){const next=parseKeys($('apiKeys').value),old=state.keyResults;state.keys=next;state.keyResults=new Map();for(const k of next)if(old.has(k))state.keyResults.set(k,old.get(k));if(state.activeKeyIndex>=next.length)state.activeKeyIndex=0;$('keyCount').textContent=`${next.length} key${next.length===1?'':'s'} detected`;renderKeyList();return next}
 function renderKeyList(){const list=$('keyList');list.innerHTML='';if(!state.keys.length){list.innerHTML='<div class="empty-state">Paste one key or multiple keys separated by commas.</div>';return}const f=document.createDocumentFragment();state.keys.forEach((key,index)=>{const result=state.keyResults.get(key)||{state:'idle',text:'Not tested',http:null,latency:null};const row=document.createElement('div');row.className='key-row';row.innerHTML=`<div class="key-main"><div class="key-top"><span class="key-index">${index+1}</span><span class="key-mask"></span></div><div class="key-meta"><span class="key-badge ${index===state.activeKeyIndex?'ok':''}">${index===state.activeKeyIndex?'Active':'Standby'}</span><span class="key-badge ${result.state==='ok'?'ok':result.state==='bad'?'bad':result.state==='loading'?'loading':''}">${result.text}</span>${result.http!=null?`<span class="key-badge">HTTP ${result.http}</span>`:''}${result.latency!=null?`<span class="key-badge">${result.latency} ms</span>`:''}</div></div><div class="key-actions"><button type="button" class="mini-btn use-key ${index===state.activeKeyIndex?'active':''}"><i data-lucide="radio" width="14"></i>Use</button><button type="button" class="mini-btn test-key"><i data-lucide="play" width="14"></i>Test</button></div>`;row.querySelector('.key-mask').textContent=state.keysVisible?key:maskKey(key);row.querySelector('.use-key').onclick=()=>{state.activeKeyIndex=index;renderKeyList();setStatus(`Key ${index+1} is active.`)};row.querySelector('.test-key').onclick=()=>testKeyAt(index);f.appendChild(row)});list.appendChild(f);lucide.createIcons()}
 function toggleDropdown(force){const shell=$('modelShell'),next=typeof force==='boolean'?force:!shell.classList.contains('open');shell.classList.toggle('open',next);$('modelTrigger').setAttribute('aria-expanded',String(next));if(next)setTimeout(()=>$('modelSearch').focus(),0)}
@@ -161,7 +274,7 @@ const content=Core.extractReply(r.data)||'(Request succeeded, but no standard te
 async function testKeyAt(index){let meta;try{meta=requestMeta('test')}catch(e){setStatus(e.message,'bad');return}const keys=effectiveKeys(meta);if(!keys.length){setStatus('Enter at least one API key.','bad');return}const key=keys[index]??keys[0]??'';if(!confirm('Run a real API request? This may use provider credits.'))return;try{await requestWithKey(key,index,{updateMain:true})}catch(e){setStatus(e.message,'bad');setResult(e.message)}}
 async function testAllKeys(){let meta;try{meta=requestMeta('test')}catch(e){setStatus(e.message,'bad');return}const keys=effectiveKeys(meta);if(!keys.length){setStatus('Enter at least one API key.','bad');return}if(!confirm(`Test ${keys.length} key${keys.length===1?'':'s'} sequentially? Real model requests may use credits.`))return;$('testAllBtn').disabled=true;$('testActiveBtn').disabled=true;setStatus(`Testing ${keys.length} key${keys.length===1?'':'s'} sequentially…`,'loading');const summary=[];try{for(let i=0;i<keys.length;i++){setStatus(`Testing ${i+1} of ${keys.length}…`,'loading');summary.push({index:i+1,...await requestWithKey(keys[i],i,{updateMain:false})})}const ok=summary.filter(x=>x.ok).length,fail=summary.length-ok;setStatus(`${ok} working, ${fail} failed`,fail?'bad':'good');setMetrics([['Working',ok],['Failed',fail],['Total',summary.length],['Endpoint',meta.path]]);setResult(summary.map(x=>`Key ${x.index}: ${x.ok?'WORKING ✓':'FAILED ✕'}\nHTTP: ${x.http??'N/A'}\nLatency: ${x.latency} ms\nTransport: ${x.transport}\n${x.ok?`Response: ${String(x.content||'').slice(0,220)}`:`Error: ${typeof x.error==='string'?x.error.slice(0,300):JSON.stringify(x.error)}`}`).join('\n\n────────────\n\n'))}finally{$('testAllBtn').disabled=false;$('testActiveBtn').disabled=false}}
 function clearAll(){$('apiKeys').value='';$('manualModel').value='';$('modelSearch').value='';state.models=[];state.selected=null;state.keys=[];state.activeKeyIndex=0;state.keyResults=new Map();state.keysVisible=false;$('selectedModelName').textContent='Load models first';$('selectedModelId').textContent='No model selected';$('keyCount').textContent='0 keys detected';renderModelList([]);renderKeyList();setMetrics([]);setStatus('Cleared.');setResult('No result yet.');toggleDropdown(false);$('toggleKeys').innerHTML='<i data-lucide="eye" width="17"></i>';lucide.createIcons()}
-$('apiKeys').addEventListener('input',syncKeys);$('toggleKeys').onclick=()=>{state.keysVisible=!state.keysVisible;$('toggleKeys').innerHTML=state.keysVisible?'<i data-lucide="eye-off" width="17"></i>':'<i data-lucide="eye" width="17"></i>';renderKeyList();lucide.createIcons()};$('modelTrigger').onclick=()=>toggleDropdown();$('modelSearch').oninput=e=>renderModelList(filterModels(state.models,e.target.value));$('loadBtn').onclick=loadModels;$('testAllBtn').onclick=testAllKeys;$('testActiveBtn').onclick=()=>testKeyAt(state.activeKeyIndex);$('clearBtn').onclick=clearAll;$('copyBtn').onclick=async()=>{if(!state.lastResultText){setStatus('No result to copy.','bad');return}try{await navigator.clipboard.writeText(state.lastResultText);setStatus('Result copied.','good')}catch{setStatus('Clipboard access failed. Copy the result manually.','bad')}};$('useManualBtn').onclick=()=>{const m=$('manualModel').value.trim();if(!m){setStatus('Enter a manual model ID first.','bad');return}$('selectedModelName').textContent='Manual model ID';$('selectedModelId').textContent=m;setStatus(`Manual model selected: ${m}`)};$('usePresets').onchange=e=>setPresetMode(e.target.checked);$('providerSearch').oninput=e=>renderProviderSearch(e.target.value);$('providerSearch').onfocus=e=>renderProviderSearch(e.target.value);$('autoSetupBtn').onclick=applyPreset;$('providerSelect').onchange=()=>{if($('providerSelect').value==='custom'){$('usePresets').checked=false;setPresetMode(false);return}const p=currentProvider();if(p)$('providerSearch').value=p.name;updateEndpointOptions()};$('endpointSelect').onchange=applyPreset;document.addEventListener('click',e=>{if(!$('modelShell').contains(e.target))toggleDropdown(false)});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleDropdown(false)});
+$('apiKeys').addEventListener('input',syncKeys);$('toggleKeys').onclick=()=>{state.keysVisible=!state.keysVisible;$('toggleKeys').innerHTML=state.keysVisible?'<i data-lucide="eye-off" width="17"></i>':'<i data-lucide="eye" width="17"></i>';renderKeyList();lucide.createIcons()};$('modelTrigger').onclick=()=>toggleDropdown();$('modelSearch').oninput=e=>renderModelList(filterModels(state.models,e.target.value));$('loadBtn').onclick=loadModels;$('testAllBtn').onclick=testAllKeys;$('testActiveBtn').onclick=()=>testKeyAt(state.activeKeyIndex);$('clearBtn').onclick=clearAll;$('copyBtn').onclick=async()=>{if(!state.lastResultText){setStatus('No result to copy.','bad');return}try{await navigator.clipboard.writeText(state.lastResultText);setStatus('Result copied.','good')}catch{setStatus('Clipboard access failed. Copy the result manually.','bad')}};$('useManualBtn').onclick=()=>{const m=$('manualModel').value.trim();if(!m){setStatus('Enter a manual model ID first.','bad');return}$('selectedModelName').textContent='Manual model ID';$('selectedModelId').textContent=m;setStatus(`Manual model selected: ${m}`)};$('usePresets').onchange=e=>setPresetMode(e.target.checked);$('providerSearch').oninput=e=>renderProviderSearch(e.target.value);$('providerSearch').onfocus=e=>renderProviderSearch(e.target.value);$('autoSetupBtn').onclick=probeProviderSetup;$('providerSelect').onchange=()=>{if($('providerSelect').value==='custom'){$('usePresets').checked=false;setPresetMode(false);return}const p=currentProvider();if(p)$('providerSearch').value=p.name;updateEndpointOptions()};$('endpointSelect').onchange=applyPreset;document.addEventListener('click',e=>{if(!$('modelShell').contains(e.target))toggleDropdown(false)});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleDropdown(false)});
 updateProviderOptions();setPresetMode(true);renderModelList([]);renderKeyList();lucide.createIcons();
 </script>
 </body>

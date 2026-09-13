@@ -58,6 +58,22 @@ test('buildUpstreamRequest supports custom HTTPS endpoints only when proxy host 
   assert.equal(built.options.headers.Authorization, 'Bearer custom-secret');
 });
 
+test('buildUpstreamRequest preserves a full custom endpoint URL when customPath is empty', () => {
+  const built = proxy.buildUpstreamRequest({
+    providerId: 'custom',
+    customBaseUrl: 'https://api.example.com/v1/public/status',
+    customPath: '',
+    customMethod: 'GET',
+    customFormat: 'none',
+    authMode: 'none',
+    disableAuth: true,
+    customProxyAllowlist: ['api.example.com']
+  });
+  assert.equal(built.url, 'https://api.example.com/v1/public/status');
+  assert.equal(built.options.method, 'GET');
+  assert.equal(built.options.headers.Authorization, undefined);
+});
+
 test('buildUpstreamRequest sends no authentication when custom auth mode is none', () => {
   const built = proxy.buildUpstreamRequest({
     providerId: 'custom',

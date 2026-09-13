@@ -15,7 +15,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Verify server and tests
+      - name: Verify server, provider presets, HTML and tests
         run: npm run verify
-      - name: Verify browser JavaScript syntax
-        run: node --check app.js

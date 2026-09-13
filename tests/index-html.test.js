@@ -65,6 +65,16 @@ test('authentication toggle is present and synchronized with provider/custom aut
   assert.match(html, /if\(!\$\('sendAuth'\)\.checked\)return\{type:'none'/);
 });
 
+test('endpoint-only mode accepts one full HTTPS endpoint and disables preset auth requirements', () => {
+  assert.match(html, /id="endpointOnly"/);
+  assert.match(html, /Endpoint Only Mode/i);
+  assert.match(html, /id="endpointOnlyURL"/);
+  assert.match(html, /syncEndpointOnlyMode\(/);
+  assert.match(html, /endpointOnly'\)\.onchange/);
+  assert.match(html, /endpointOnlyURL/);
+  assert.match(html, /customPath:.*endpointOnly/s);
+});
+
 test('frontend references the provider library and safe universal proxy', () => {
   assert.match(html, /\/lib\/provider-presets\.js/);
   assert.match(html, /\/api\/proxy/);

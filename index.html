@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>JepongDevxyz API Tester</title>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="logo"><i data-lucide="route"></i></div>
+    <h1>JepongDevxyz API Tester</h1>
+    <div class="sub">AgentRouter.org tester with Direct Browser, Vercel Proxy, OpenAI Chat and Anthropic Messages modes.</div>
+  </header>
+
+  <section class="card">
+    <div class="endpoint-grid">
+      <div><span class="label">AgentRouter base</span><div class="endpoint">https://agentrouter.org</div></div>
+      <div><span class="label">CORS-safe proxy</span><div class="endpoint">/api/agentrouter</div></div>
+    </div>
+    <div class="notice info"><i data-lucide="shield-check" size="17"></i><div>The proxy solves browser CORS by making the AgentRouter request server-side. It does <strong>not</strong> spoof or bypass AgentRouter provider-side client restrictions.</div></div>
+  </section>
+
+  <section class="card">
+    <span class="label">Connection Mode</span>
+    <div class="mode-grid">
+      <label class="mode"><input type="radio" name="mode" value="auto" checked><span><i data-lucide="wand-sparkles" size="16"></i>Auto</span></label>
+      <label class="mode"><input type="radio" name="mode" value="direct"><span><i data-lucide="globe" size="16"></i>Direct Browser</span></label>
+      <label class="mode"><input type="radio" name="mode" value="proxy"><span><i data-lucide="server" size="16"></i>Vercel Proxy</span></label>
+    </div>
+    <div class="help"><strong>Auto</strong> tries direct first and falls back to the Vercel proxy only when the browser request itself fails (for example CORS/network). Provider <code>unauthorized_client</code> responses are reported, not bypassed.</div>
+
+    <div class="divider"></div>
+
+    <label for="keys">AgentRouter API Key(s)</label>
+    <textarea id="keys" placeholder="sk-xxxxxxxx\n\nMultiple: sk-key1, sk-key2, sk-key3" autocomplete="off" spellcheck="false"></textarea>
+    <div class="help">One or multiple keys separated by comma, space, or new line. Keys are never saved to localStorage.</div>
+    <div class="notice warn"><i data-lucide="triangle-alert" size="17"></i><div>Direct Browser mode exposes the key to browser DevTools. Proxy mode sends the key to your own Vercel function for that request only. Do not publish real keys inside source code.</div></div>
+  </section>
+
+  <section class="card">
+    <div class="form-grid">
+      <div>
+        <label for="surface">API Surface</label>
+        <select id="surface">
+          <option value="chat">OpenAI-compatible /v1/chat/completions</option>
+          <option value="messages">Anthropic-compatible /v1/messages</option>
+        </select>
+      </div>
+      <div>
+        <label for="authMode">Authentication Header</label>
+        <select id="authMode">
+          <option value="bearer">Authorization: Bearer</option>
+          <option value="x-api-key">x-api-key</option>
+        </select>
+      </div>
+      <div>
+        <label for="model">Model</label>
+        <input id="model" list="modelSuggestions" value="deepseek-v4-flash" autocomplete="off" spellcheck="false">
+        <datalist id="modelSuggestions">
+          <option value="deepseek-v4-flash"></option>
+          <option value="claude-opus-4-8"></option>
+          <option value="gpt-5.6-sol"></option>
+          <option value="gpt-5.6-luna"></option>
+          <option value="glm-5.3"></option>
+        </datalist>
+      </div>
+      <div>
+        <label for="maxTokens">Max output tokens</label>
+        <input id="maxTokens" type="number" min="1" max="2048" value="32" inputmode="numeric">
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label for="prompt">Test Prompt</label>
+      <textarea id="prompt">Reply exactly: AGENTROUTER_WORKING</textarea>
+    </div>
+
+    <label class="checkline" style="margin-top:12px"><input id="confirmPaid" type="checkbox"> I understand model tests may use a small amount of AgentRouter credit.</label>
+
+    <div class="actions">
+      <button id="modelsBtn" class="secondary"><i data-lucide="list" size="17"></i>Check Models</button>
+      <button id="testBtn" class="paid"><i data-lucide="send" size="17"></i>Run Model Test</button>
+      <button id="copyBtn" class="secondary"><i data-lucide="copy" size="17"></i>Copy Results</button>
+      <button id="clearBtn" class="danger"><i data-lucide="trash-2" size="17"></i>Clear</button>
+    </div>
+  </section>
+
+  <section id="resultsCard" class="card hidden">
+    <div class="toolbar">
+      <div><span class="label" style="margin:0">API Results</span><div id="summary" class="small"></div></div>
+      <div class="toolbar-actions"><button id="scrollTopBtn" class="mini-btn"><i data-lucide="arrow-up" size="14"></i>Top</button></div>
+    </div>
+    <div id="results"></div>
+  </section>
+
+  <div class="footer">JepongDevxyz • AgentRouter API Tester • No provider restriction spoofing</div>
+</div>
+
+<script src="/lib/agentrouter-core.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

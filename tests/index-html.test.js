@@ -87,6 +87,17 @@ test('endpoint-only mode auto-detects a base URL, auth style, model catalog, and
   assert.doesNotMatch(html, /for\(const id of \['baseURL','endpointPath','modelsPath','apiKeys'\]\)/);
 });
 
+test('model list can probe real model availability and display live status badges', () => {
+  assert.match(html, /id="checkLiveModelsBtn"/);
+  assert.match(html, /Check Live Models/i);
+  assert.match(html, /checkLiveModels\(/);
+  assert.match(html, /modelStatuses/);
+  assert.match(html, /LIVE/);
+  assert.match(html, /DOWN/);
+  assert.match(html, /RATE LIMITED/);
+  assert.match(html, /UNTESTED/);
+});
+
 test('frontend references the provider library and safe universal proxy', () => {
   assert.match(html, /\/lib\/provider-presets\.js/);
   assert.match(html, /\/api\/proxy/);

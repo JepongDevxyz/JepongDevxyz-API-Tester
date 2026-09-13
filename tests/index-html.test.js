@@ -18,6 +18,7 @@ test('index keeps the approved AI API Tester UI and universal controls', () => {
     'id="providerSearchResults"',
     'id="providerSelect"',
     'id="providerTrustBadge"',
+    'id="autoSetupBtn"',
     'id="endpointSelect"',
     'id="transportMode"',
     'id="baseURL"',
@@ -39,12 +40,21 @@ test('inline browser JavaScript parses successfully', () => {
   for (const source of scripts) new vm.Script(source);
 });
 
-test('frontend exposes provider search, trust labels, and auto setup behavior', () => {
+test('frontend exposes provider search, trust labels, and live auto setup behavior', () => {
   assert.match(html, /searchProviders\(/);
   assert.match(html, /getAutoSetup\(/);
+  assert.match(html, /\/lib\/auto-setup-core\.js/);
+  assert.match(html, /probeProviderSetup\(/);
+  assert.match(html, /classifyProbeResult\(/);
+  assert.match(html, /chooseProbeModel\(/);
   assert.match(html, /Community/i);
   assert.match(html, /Verified/i);
   assert.match(html, /Auto setup/i);
+  assert.match(html, /small real API test/i);
+});
+
+test('auto setup button runs the live probe instead of only copying preset fields', () => {
+  assert.match(html, /autoSetupBtn'\)\.onclick=probeProviderSetup/);
 });
 
 test('frontend references the provider library and safe universal proxy', () => {

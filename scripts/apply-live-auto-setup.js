@@ -83,9 +83,9 @@ const probeFunction = `async function probeProviderSetup(){
       $('endpointSelect').value=endpoint.id;
       applyPreset();
       if(!$('manualModel').value.trim()&&!state.selected?.id){$('manualModel').value=probeModel}
-      setStatus(`Auto setup: testing ${i+1}/${candidates.length} — ${endpoint.label}…`,'loading');
-      setMetrics([['Provider',provider.name],['Endpoint',endpoint.path],['Model',probeModel],['Probe',`${i+1}/${candidates.length}`]]);
-      setResult(`Testing documented endpoint:\n${endpoint.method} ${endpoint.baseUrl||provider.baseUrl}${endpoint.path}\n\nA tiny real request is being sent. Client restrictions are never bypassed.`);
+      setStatus('Auto setup: testing '+(i+1)+'/'+candidates.length+' — '+endpoint.label+'…','loading');
+      setMetrics([['Provider',provider.name],['Endpoint',endpoint.path],['Model',probeModel],['Probe',String(i+1)+'/'+candidates.length]]);
+      setResult('Testing documented endpoint:\n'+endpoint.method+' '+(endpoint.baseUrl||provider.baseUrl)+endpoint.path+'\n\nA tiny real request is being sent. Client restrictions are never bypassed.');
       let result;
       try{result=await requestKey(key,'test')}catch(error){result={reachedServer:false,ok:false,status:0,error:error.message,data:{error:error.message},transport:'n/a'}}
       const classified=AutoSetup.classifyProbeResult(result);
@@ -93,10 +93,10 @@ const probeFunction = `async function probeProviderSetup(){
       if(classified.kind==='success'){
         working=true;
         const reply=Core.extractReply(result.data)||'(Successful response received.)';
-        setStatus(`Working setup found ✓ — ${endpoint.label}`,'good');
-        setMetrics([['HTTP',result.status||200],['Latency',`${result.latency||0} ms`],['Transport',result.autoFallback?'proxy fallback':result.transport||'n/a'],['Model',probeModel]]);
-        setResult(`WORKING SETUP ✓\nProvider: ${provider.name}\nEndpoint: ${endpoint.method} ${endpoint.baseUrl||provider.baseUrl}${endpoint.path}\nFormat: ${endpoint.format}\nAuth: ${effectivePresetAuth(provider,endpoint).type}\nModel: ${probeModel}\n\nProbe response:\n${reply}\n\nThe selected endpoint has been left applied in the form.`);
-        $('providerNote').innerHTML+=` • <strong>Live tested working</strong>: ${endpoint.label}`;
+        setStatus('Working setup found ✓ — '+endpoint.label,'good');
+        setMetrics([['HTTP',result.status||200],['Latency',String(result.latency||0)+' ms'],['Transport',result.autoFallback?'proxy fallback':result.transport||'n/a'],['Model',probeModel]]);
+        setResult('WORKING SETUP ✓\nProvider: '+provider.name+'\nEndpoint: '+endpoint.method+' '+(endpoint.baseUrl||provider.baseUrl)+endpoint.path+'\nFormat: '+endpoint.format+'\nAuth: '+effectivePresetAuth(provider,endpoint).type+'\nModel: '+probeModel+'\n\nProbe response:\n'+reply+'\n\nThe selected endpoint has been left applied in the form.');
+        $('providerNote').innerHTML+=' • <strong>Live tested working</strong>: '+endpoint.label;
         return;
       }
     }

@@ -74,6 +74,15 @@ test('buildEndpointDiscoveryPlan preserves a full request endpoint instead of ap
   assert.equal(plan.requests[0].format, 'openai_chat');
 });
 
+test('buildEndpointDiscoveryPlan preserves an arbitrary non-version full endpoint as a generic GET target', () => {
+  const plan = auto.buildEndpointDiscoveryPlan('https://myfreeapi.com/v1/status', { keyPresent: false });
+  assert.equal(plan.exact, true);
+  assert.equal(plan.requests.length, 1);
+  assert.equal(plan.requests[0].url, 'https://myfreeapi.com/v1/status');
+  assert.equal(plan.requests[0].method, 'GET');
+  assert.equal(plan.requests[0].format, 'none');
+});
+
 test('Gemini-compatible Google endpoints prefer x-goog-api-key and include native generateContent discovery', () => {
   const plan = auto.buildEndpointDiscoveryPlan('https://generativelanguage.googleapis.com/v1beta', { keyPresent: true });
   assert.equal(plan.authModes[0], 'x-goog-api-key');

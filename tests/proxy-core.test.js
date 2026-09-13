@@ -29,6 +29,17 @@ test('buildUpstreamRequest substitutes Gemini model in native generateContent pa
   assert.equal(JSON.parse(built.options.body).contents[0].parts[0].text, 'Reply OK');
 });
 
+test('buildUpstreamRequest can disable preset authentication without requiring an API key', () => {
+  const built = proxy.buildUpstreamRequest({
+    providerId: 'anthropic', endpointId: 'messages', disableAuth: true,
+    model: 'claude-opus-4-8', prompt: 'Reply OK', maxTokens: 8
+  });
+  assert.equal(built.options.headers.Authorization, undefined);
+  assert.equal(built.options.headers['x-api-key'], undefined);
+  assert.equal(built.options.headers['x-goog-api-key'], undefined);
+  assert.equal(built.options.headers['anthropic-version'], '2023-06-01');
+});
+
 test('buildUpstreamRequest supports custom HTTPS endpoints only when proxy host is allowlisted', () => {
   const input = {
     providerId: 'custom',
@@ -45,6 +56,23 @@ test('buildUpstreamRequest supports custom HTTPS endpoints only when proxy host 
   const built = proxy.buildUpstreamRequest(input);
   assert.equal(built.url, 'https://api.example.com/v1/chat/completions');
   assert.equal(built.options.headers.Authorization, 'Bearer custom-secret');
+});
+
+test('buildUpstreamRequest sends no authentication when custom auth mode is none', () => {
+  const built = proxy.buildUpstreamRequest({
+    providerId: 'custom',
+    apiKey: 'this-key-must-not-be-sent',
+    customBaseUrl: 'https://api.example.com',
+    customPath: '/v1/models',
+    customMethod: 'GET',
+    customFormat: 'none',
+    authMode: 'none',
+    customProxyAllowlist: ['api.example.com']
+  });
+  assert.equal(built.options.headers.Authorization, undefined);
+  assert.equal(built.options.headers['x-api-key'], undefined);
+  assert.equal(built.options.headers['x-goog-api-key'], undefined);
+  assert.ok(!built.url.includes('this-key-must-not-be-sent'));
 });
 
 test('buildUpstreamRequest rejects custom proxy hosts that are not allowlisted', () => {

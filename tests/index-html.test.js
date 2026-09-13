@@ -75,6 +75,18 @@ test('endpoint-only mode accepts one full HTTPS endpoint and disables preset aut
   assert.match(html, /customPath:.*endpointOnly/s);
 });
 
+test('endpoint-only mode auto-detects a base URL, auth style, model catalog, and request format before testing', () => {
+  assert.match(html, /Base URL or full API endpoint/i);
+  assert.match(html, /https:\/\/myfreeapi\.com\/v1/);
+  assert.match(html, /detectEndpointOnlySetup\(/);
+  assert.match(html, /ensureEndpointOnlySetup\(/);
+  assert.match(html, /buildEndpointDiscoveryPlan\(/);
+  assert.match(html, /endpointDetection/);
+  assert.match(html, /Auto-detecting/i);
+  assert.match(html, /x-goog-api-key/);
+  assert.doesNotMatch(html, /for\(const id of \['baseURL','endpointPath','modelsPath','apiKeys'\]\)/);
+});
+
 test('frontend references the provider library and safe universal proxy', () => {
   assert.match(html, /\/lib\/provider-presets\.js/);
   assert.match(html, /\/api\/proxy/);

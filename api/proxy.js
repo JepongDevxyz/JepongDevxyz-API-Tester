@@ -1,4 +1,6 @@
-const { buildUpstreamRequest, normalizeAllowlist } = require('../lib/proxy-core');
+const dns = require('node:dns').promises;
+const net = require('node:net');
+const { buildUpstreamRequest, normalizeAllowlist, isPrivateIpv4, isPrivateIpv6 } = require('../lib/proxy-core');
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
@@ -10,6 +12,22 @@ function parseBody(req) {
   }
   if (typeof req.body !== 'object' || Array.isArray(req.body)) throw new Error('Invalid request body');
   return req.body;
+}
+
+async function assertPublicDns(urlString) {
+  const url = new URL(urlString);
+  const host = url.hostname;
+  const literalType = net.isIP(host);
+  if (literalType === 4 && isPrivateIpv4(host)) throw new Error('Custom proxy target resolves to a private IPv4 address');
+  if (literalType === 6 && isPrivateIpv6(host)) throw new Error('Custom proxy target resolves to a private IPv6 address');
+  if (literalType) return;
+
+  const records = await dns.lookup(host, { all: true, verbatim: true });
+  if (!records.length) throw new Error('Custom proxy target did not resolve');
+  for (const record of records) {
+    if (record.family === 4 && isPrivateIpv4(record.address)) throw new Error('Custom proxy target resolves to a private IPv4 address');
+    if (record.family === 6 && isPrivateIpv6(record.address)) throw new Error('Custom proxy target resolves to a private IPv6 address');
+  }
 }
 
 async function readTextLimited(response) {
@@ -55,13 +73,15 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  let input;
   let built;
   try {
-    const input = parseBody(req);
+    input = parseBody(req);
     built = buildUpstreamRequest({
       ...input,
       customProxyAllowlist: normalizeAllowlist(process.env.CUSTOM_PROXY_ALLOWLIST || '')
     });
+    if (built.providerId === 'custom') await assertPublicDns(built.url);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Invalid request' });
     return;
@@ -93,8 +113,7 @@ module.exports = async function handler(req, res) {
     });
   } catch (error) {
     const timedOut = error && error.name === 'AbortError';
-    const tooLarge = /too large/i.test(error?.message || '');
-    res.status(timedOut ? 504 : tooLarge ? 502 : 502).json({
+    res.status(timedOut ? 504 : 502).json({
       proxy: true,
       provider: built.providerName,
       upstreamOk: false,
@@ -107,3 +126,5 @@ module.exports = async function handler(req, res) {
     clearTimeout(timer);
   }
 };
+
+module.exports._test = { parseBody, assertPublicDns, readTextLimited };

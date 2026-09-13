@@ -714,8 +714,7 @@ async function checkLiveModels(){
   if(authStopped)setStatus('Live check stopped because the provider rejected authentication. Remaining models stay UNTESTED.','bad');
   else setStatus(live+' LIVE, '+down+' DOWN, '+rate+' RATE LIMITED, '+untested+' UNTESTED',live?'good':(down?'bad':''));
   setMetrics([['LIVE',live],['DOWN',down],['Rate limited',rate],['Untested',untested],['Total',state.models.length]]);
-  setResult(state.models.map(model=>{const item=state.modelStatuses.get(model.id)||{state:'untested'};const meta=modelStatusMeta(item);return meta.label+'  '+model.id+(item.http?'  • HTTP '+item.http:'')+(item.latency!=null?'  • '+item.latency+' ms':'')+(item.detail?'  • '+item.detail:'')}).join('
-'));
+  setResult(state.models.map(model=>{const item=state.modelStatuses.get(model.id)||{state:'untested'};const meta=modelStatusMeta(item);return meta.label+'  '+model.id+(item.http?'  • HTTP '+item.http:'')+(item.latency!=null?'  • '+item.latency+' ms':'')+(item.detail?'  • '+item.detail:'')}).join('\n'));
 }
 async function testKeyAt(index) {
   if ($('endpointOnly').checked) {

@@ -1,5 +1,8 @@
 {
   "functions": {
+    "api/proxy.js": {
+      "maxDuration": 60
+    },
     "api/agentrouter.js": {
       "maxDuration": 60
     }

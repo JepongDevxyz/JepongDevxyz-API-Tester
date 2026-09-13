@@ -57,6 +57,14 @@ test('auto setup button runs the live probe instead of only copying preset field
   assert.match(html, /autoSetupBtn'\)\.onclick=probeProviderSetup/);
 });
 
+test('authentication toggle is present and synchronized with provider/custom auth settings', () => {
+  assert.match(html, /id="sendAuth"/);
+  assert.match(html, /Send Authentication/i);
+  assert.match(html, /syncAuthControls\(/);
+  assert.match(html, /sendAuth'\)\.onchange/);
+  assert.match(html, /if\(!\$\('sendAuth'\)\.checked\)return\{type:'none'/);
+});
+
 test('frontend references the provider library and safe universal proxy', () => {
   assert.match(html, /\/lib\/provider-presets\.js/);
   assert.match(html, /\/api\/proxy/);

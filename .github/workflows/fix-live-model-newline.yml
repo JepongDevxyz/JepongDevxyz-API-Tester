@@ -1,0 +1,32 @@
+name: Fix Live Model Newline
+
+on:
+  push:
+    paths:
+      - 'scripts/fix-live-model-newline.py'
+      - '.github/workflows/fix-live-model-newline.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply targeted fix
+        run: python3 scripts/fix-live-model-newline.py
+      - name: Commit fix
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "No syntax fix needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "fix: escape live-model result newline"
+          git push

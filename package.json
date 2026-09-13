@@ -1,11 +1,11 @@
 {
   "name": "jepongdevxyz-api-tester",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "AgentRouter.org API tester with direct browser and Vercel proxy modes.",
+  "description": "Universal AI API tester with verified provider presets, custom endpoints, direct browser tests, and a safe Vercel proxy.",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "verify": "node --check api/agentrouter.js && node --check lib/agentrouter-core.js && node --check lib/proxy-core.js && node --test tests/*.test.js"
+    "verify": "node --check api/proxy.js && node --check api/agentrouter.js && node --check lib/provider-presets.js && node --check lib/agentrouter-core.js && node --check lib/proxy-core.js && node --test tests/*.test.js"
   },
   "engines": {
     "node": ">=20"
